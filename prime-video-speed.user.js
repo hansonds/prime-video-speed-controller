@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Prime Video Speed Controller
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  Adds on-screen buttons to control playback speed on Amazon Prime Video
+// @version      1.3
+// @description  Adds on-screen buttons to control playback speed on Amazon Prime Video (Auto-hiding)
 // @author       Hanson
 // @homepageURL  https://phoenicx.org
 // @match        *://*.primevideo.com/*
@@ -16,6 +16,7 @@
     'use strict';
 
     let targetSpeed = 1.0;
+    let fadeTimeout;
 
     // Function to change the video speed
     function setSpeed(speed) {
@@ -25,11 +26,54 @@
             videos.forEach(video => {
                 video.playbackRate = targetSpeed;
             });
+            updateButtonColors(); // Refresh active colors
             showToast(`Speed set to ${speed}x`);
         } else {
             showToast('No video found playing right now.');
         }
     }
+
+    // Function to visually highlight the selected speed button
+    function updateButtonColors() {
+        const container = document.getElementById('pv-speed-controller');
+        if (!container) return;
+        
+        const buttons = container.querySelectorAll('.speed-btn');
+        buttons.forEach(btn => {
+            const btnSpeed = parseFloat(btn.dataset.speed);
+            if (btnSpeed === targetSpeed) {
+                // Active color (Lighter)
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+                btn.style.borderColor = '#ffffff';
+                btn.style.color = '#ffffff';
+            } else {
+                // Inactive color
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                btn.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                btn.style.color = 'rgba(255, 255, 255, 0.8)';
+            }
+        });
+    }
+
+    // Function to wake up the UI when the mouse moves
+    function wakeUpUI() {
+        const ui = document.getElementById('pv-speed-controller');
+        if (ui) {
+            ui.style.opacity = '1';
+            ui.style.pointerEvents = 'auto'; // Re-enable clicks when visible
+            
+            clearTimeout(fadeTimeout);
+            
+            // Hide after 2.5 seconds of inactivity
+            fadeTimeout = setTimeout(() => {
+                ui.style.opacity = '0';
+                ui.style.pointerEvents = 'none'; // Prevent invisible clicks
+            }, 2500); 
+        }
+    }
+
+    // Listen for mouse movement anywhere on the page to wake up the UI
+    document.addEventListener('mousemove', wakeUpUI);
 
     // Function to display a temporary notification
     function showToast(message) {
@@ -40,10 +84,10 @@
             toast = document.createElement('div');
             toast.id = 'pv-speed-toast';
             Object.assign(toast.style, {
-                position: 'absolute', // Changed to absolute for better fullscreen compatibility
+                position: 'absolute',
                 top: '70px',
                 left: '20px',
-                zIndex: '2147483647', // Max z-index
+                zIndex: '2147483647',
                 backgroundColor: 'rgba(0, 168, 225, 0.9)', 
                 color: '#ffffff',
                 padding: '10px 15px',
@@ -52,11 +96,11 @@
                 fontSize: '14px',
                 fontWeight: 'bold',
                 transition: 'opacity 0.3s ease-in-out',
-                pointerEvents: 'none'
+                pointerEvents: 'none',
+                opacity: '0'
             });
         }
         
-        // Ensure it's in the right container (handles fullscreen toggling)
         if (toast.parentElement !== container) {
             container.appendChild(toast);
         }
@@ -73,45 +117,53 @@
     // Function to build and inject the UI panel
     function injectUI(container) {
         const existingUI = document.getElementById('pv-speed-controller');
-        if (existingUI) existingUI.remove(); // Clean up before re-injecting
+        if (existingUI) existingUI.remove();
 
         const wrapper = document.createElement('div');
         wrapper.id = 'pv-speed-controller';
 
         Object.assign(wrapper.style, {
-            position: 'absolute', // Absolute binds it to the relative fullscreen container
+            position: 'absolute',
             top: '20px',
             left: '20px',
-            zIndex: '2147483647', // Max z-index
+            zIndex: '2147483647',
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
             padding: '8px',
             borderRadius: '8px',
             display: 'flex',
             gap: '8px',
             backdropFilter: 'blur(5px)',
-            alignItems: 'center'
+            alignItems: 'center',
+            transition: 'opacity 0.4s ease', // Smooth fade in/out
+            opacity: '1' 
         });
 
-        // Add Speed Buttons
         const speeds = [1, 1.25, 1.5, 2];
         speeds.forEach(speed => {
             const btn = document.createElement('button');
             btn.innerText = speed + 'x';
+            btn.className = 'speed-btn'; // Class for easy selection
+            btn.dataset.speed = speed;   // Store speed value on the element
 
             Object.assign(btn.style, {
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                color: '#ffffff',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
                 padding: '5px 12px',
                 cursor: 'pointer',
                 borderRadius: '4px',
                 fontSize: '14px',
                 fontWeight: 'bold',
-                fontFamily: 'Arial, sans-serif'
+                fontFamily: 'Arial, sans-serif',
+                transition: 'all 0.2s',
+                borderStyle: 'solid',
+                borderWidth: '1px'
             });
 
-            btn.onmouseover = () => btn.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
-            btn.onmouseout = () => btn.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+            // Hover effects (only apply if it's not the currently active button)
+            btn.onmouseover = () => {
+                if (parseFloat(btn.dataset.speed) !== targetSpeed) {
+                    btn.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+                }
+            };
+            btn.onmouseout = () => updateButtonColors(); // Reset to standard/active state
 
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -122,7 +174,6 @@
             wrapper.appendChild(btn);
         });
 
-        // Add "Created by Hanson" credit link
         const credit = document.createElement('a');
         credit.innerText = 'by Hanson';
         credit.href = 'https://phoenicx.org';
@@ -142,6 +193,10 @@
 
         wrapper.appendChild(credit);
         container.appendChild(wrapper);
+        
+        // Initialize the correct button colors and set the initial fade timer
+        updateButtonColors();
+        wakeUpUI();
     }
 
     // Master Enforcement Loop
@@ -151,21 +206,18 @@
         const uiExists = document.getElementById('pv-speed-controller');
 
         if (videos.length > 0) {
-            // 1. Force the speed constantly (overrides Prime Video's auto-reset)
             videos.forEach(v => {
                 if (v.playbackRate !== targetSpeed) {
                     v.playbackRate = targetSpeed;
                 }
             });
 
-            // 2. Ensure UI is always in the active viewing layer (handles fullscreen)
             if (!uiExists || uiExists.parentElement !== activeContainer) {
                 injectUI(activeContainer);
             }
         } else if (uiExists) {
-            // Clean up if no video is on screen
             uiExists.remove();
         }
-    }, 1000); // Check every second
+    }, 1000);
 
 })();
