@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Prime Video Speed Controller
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Adds on-screen buttons to control playback speed on Amazon Prime Video
 // @author       Hanson
 // @homepageURL  https://phoenicx.org
@@ -15,11 +15,16 @@
 (function() {
     'use strict';
 
+    let targetSpeed = 1.0;
+
     // Function to change the video speed
     function setSpeed(speed) {
-        const video = document.querySelector('video');
-        if (video) {
-            video.playbackRate = speed;
+        targetSpeed = speed;
+        const videos = document.querySelectorAll('video');
+        if (videos.length > 0) {
+            videos.forEach(video => {
+                video.playbackRate = targetSpeed;
+            });
             showToast(`Speed set to ${speed}x`);
         } else {
             showToast('No video found playing right now.');
@@ -29,16 +34,17 @@
     // Function to display a temporary notification
     function showToast(message) {
         let toast = document.getElementById('pv-speed-toast');
+        const container = document.fullscreenElement || document.body;
+
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'pv-speed-toast';
-            // Styling the notification
             Object.assign(toast.style, {
-                position: 'fixed',
+                position: 'absolute', // Changed to absolute for better fullscreen compatibility
                 top: '70px',
                 left: '20px',
-                zIndex: '9999999',
-                backgroundColor: 'rgba(0, 168, 225, 0.9)', // Prime Video Blue
+                zIndex: '2147483647', // Max z-index
+                backgroundColor: 'rgba(0, 168, 225, 0.9)', 
                 color: '#ffffff',
                 padding: '10px 15px',
                 borderRadius: '5px',
@@ -48,12 +54,16 @@
                 transition: 'opacity 0.3s ease-in-out',
                 pointerEvents: 'none'
             });
-            document.body.appendChild(toast);
         }
         
+        // Ensure it's in the right container (handles fullscreen toggling)
+        if (toast.parentElement !== container) {
+            container.appendChild(toast);
+        }
+
         toast.innerText = message;
         toast.style.opacity = '1';
-        
+
         clearTimeout(window.toastTimeout);
         window.toastTimeout = setTimeout(() => {
             toast.style.opacity = '0';
@@ -61,25 +71,24 @@
     }
 
     // Function to build and inject the UI panel
-    function injectUI() {
-        if (document.getElementById('pv-speed-controller')) return;
+    function injectUI(container) {
+        const existingUI = document.getElementById('pv-speed-controller');
+        if (existingUI) existingUI.remove(); // Clean up before re-injecting
 
-        const container = document.createElement('div');
-        container.id = 'pv-speed-controller';
-        
-        // Styling the control panel
-        Object.assign(container.style, {
-            position: 'fixed',
+        const wrapper = document.createElement('div');
+        wrapper.id = 'pv-speed-controller';
+
+        Object.assign(wrapper.style, {
+            position: 'absolute', // Absolute binds it to the relative fullscreen container
             top: '20px',
             left: '20px',
-            zIndex: '9999998',
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: '2147483647', // Max z-index
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
             padding: '8px',
             borderRadius: '8px',
             display: 'flex',
             gap: '8px',
             backdropFilter: 'blur(5px)',
-            transition: 'opacity 0.3s',
             alignItems: 'center'
         });
 
@@ -88,8 +97,7 @@
         speeds.forEach(speed => {
             const btn = document.createElement('button');
             btn.innerText = speed + 'x';
-            
-            // Styling the buttons
+
             Object.assign(btn.style, {
                 backgroundColor: 'rgba(255, 255, 255, 0.1)',
                 color: '#ffffff',
@@ -102,27 +110,24 @@
                 fontFamily: 'Arial, sans-serif'
             });
 
-            // Hover effects
             btn.onmouseover = () => btn.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
             btn.onmouseout = () => btn.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
 
-            // Click event to change speed
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setSpeed(speed);
             });
 
-            container.appendChild(btn);
+            wrapper.appendChild(btn);
         });
 
         // Add "Created by Hanson" credit link
         const credit = document.createElement('a');
         credit.innerText = 'by Hanson';
         credit.href = 'https://phoenicx.org';
-        credit.target = '_blank'; // Opens in a new tab
-        
-        // Styling the credit link
+        credit.target = '_blank';
+
         Object.assign(credit.style, {
             color: 'rgba(255, 255, 255, 0.5)',
             fontSize: '12px',
@@ -132,26 +137,35 @@
             transition: 'color 0.2s'
         });
 
-        // Hover effect for the link
         credit.onmouseover = () => credit.style.color = '#ffffff';
         credit.onmouseout = () => credit.style.color = 'rgba(255, 255, 255, 0.5)';
 
-        container.appendChild(credit);
-        document.body.appendChild(container);
+        wrapper.appendChild(credit);
+        container.appendChild(wrapper);
     }
 
-    // Prime Video is a Single Page Application (SPA), so we periodically check 
-    // if a video is present to inject the UI.
+    // Master Enforcement Loop
     setInterval(() => {
-        const video = document.querySelector('video');
+        const videos = document.querySelectorAll('video');
+        const activeContainer = document.fullscreenElement || document.body;
         const uiExists = document.getElementById('pv-speed-controller');
-        
-        if (video && !uiExists) {
-            injectUI();
-        } else if (!video && uiExists) {
-            // Hide/remove the UI if the user leaves the video player
+
+        if (videos.length > 0) {
+            // 1. Force the speed constantly (overrides Prime Video's auto-reset)
+            videos.forEach(v => {
+                if (v.playbackRate !== targetSpeed) {
+                    v.playbackRate = targetSpeed;
+                }
+            });
+
+            // 2. Ensure UI is always in the active viewing layer (handles fullscreen)
+            if (!uiExists || uiExists.parentElement !== activeContainer) {
+                injectUI(activeContainer);
+            }
+        } else if (uiExists) {
+            // Clean up if no video is on screen
             uiExists.remove();
         }
-    }, 2000);
+    }, 1000); // Check every second
 
 })();
