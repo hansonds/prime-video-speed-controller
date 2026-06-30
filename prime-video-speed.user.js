@@ -1,14 +1,15 @@
 // ==UserScript==
-// @name         Prime Video Speed Controller
+// @name         Prime Video & Hotstar Speed Controller
 // @namespace    http://tampermonkey.net/
-// @version      1.3
-// @description  Adds on-screen buttons to control playback speed on Amazon Prime Video (Auto-hiding)
+// @version      1.4
+// @description  Adds on-screen buttons to control playback speed on Prime Video and Hotstar (with auto-hiding)
 // @author       Hanson
 // @homepageURL  https://phoenicx.org
 // @match        *://*.primevideo.com/*
 // @match        *://*.amazon.com/*
 // @match        *://*.amazon.co.uk/*
 // @match        *://*.amazon.de/*
+// @match        *://*.hotstar.com/*
 // @grant        none
 // ==/UserScript==
 
@@ -29,20 +30,20 @@
             updateButtonColors(); // Refresh active colors
             showToast(`Speed set to ${speed}x`);
         } else {
-            showToast('No video found playing right now.');
+            showToast('No active video found.');
         }
     }
 
     // Function to visually highlight the selected speed button
     function updateButtonColors() {
-        const container = document.getElementById('pv-speed-controller');
+        const container = document.getElementById('stream-speed-controller');
         if (!container) return;
-        
+
         const buttons = container.querySelectorAll('.speed-btn');
         buttons.forEach(btn => {
             const btnSpeed = parseFloat(btn.dataset.speed);
             if (btnSpeed === targetSpeed) {
-                // Active color (Lighter)
+                // Active color (Lighter solid background, bright white border)
                 btn.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
                 btn.style.borderColor = '#ffffff';
                 btn.style.color = '#ffffff';
@@ -57,18 +58,18 @@
 
     // Function to wake up the UI when the mouse moves
     function wakeUpUI() {
-        const ui = document.getElementById('pv-speed-controller');
+        const ui = document.getElementById('stream-speed-controller');
         if (ui) {
             ui.style.opacity = '1';
             ui.style.pointerEvents = 'auto'; // Re-enable clicks when visible
-            
+
             clearTimeout(fadeTimeout);
-            
+
             // Hide after 2.5 seconds of inactivity
             fadeTimeout = setTimeout(() => {
                 ui.style.opacity = '0';
                 ui.style.pointerEvents = 'none'; // Prevent invisible clicks
-            }, 2500); 
+            }, 2500);
         }
     }
 
@@ -77,18 +78,18 @@
 
     // Function to display a temporary notification
     function showToast(message) {
-        let toast = document.getElementById('pv-speed-toast');
+        let toast = document.getElementById('stream-speed-toast');
         const container = document.fullscreenElement || document.body;
 
         if (!toast) {
             toast = document.createElement('div');
-            toast.id = 'pv-speed-toast';
+            toast.id = 'stream-speed-toast';
             Object.assign(toast.style, {
                 position: 'absolute',
                 top: '70px',
                 left: '20px',
-                zIndex: '2147483647',
-                backgroundColor: 'rgba(0, 168, 225, 0.9)', 
+                zIndex: '2147483647', // Maximum z-index depth
+                backgroundColor: 'rgba(0, 168, 225, 0.9)', // Clean branding blue
                 color: '#ffffff',
                 padding: '10px 15px',
                 borderRadius: '5px',
@@ -100,7 +101,7 @@
                 opacity: '0'
             });
         }
-        
+
         if (toast.parentElement !== container) {
             container.appendChild(toast);
         }
@@ -116,11 +117,11 @@
 
     // Function to build and inject the UI panel
     function injectUI(container) {
-        const existingUI = document.getElementById('pv-speed-controller');
+        const existingUI = document.getElementById('stream-speed-controller');
         if (existingUI) existingUI.remove();
 
         const wrapper = document.createElement('div');
-        wrapper.id = 'pv-speed-controller';
+        wrapper.id = 'stream-speed-controller';
 
         Object.assign(wrapper.style, {
             position: 'absolute',
@@ -134,16 +135,16 @@
             gap: '8px',
             backdropFilter: 'blur(5px)',
             alignItems: 'center',
-            transition: 'opacity 0.4s ease', // Smooth fade in/out
-            opacity: '1' 
+            transition: 'opacity 0.4s ease', // Smooth fade transition
+            opacity: '1'
         });
 
         const speeds = [1, 1.25, 1.5, 2];
         speeds.forEach(speed => {
             const btn = document.createElement('button');
             btn.innerText = speed + 'x';
-            btn.className = 'speed-btn'; // Class for easy selection
-            btn.dataset.speed = speed;   // Store speed value on the element
+            btn.className = 'speed-btn';
+            btn.dataset.speed = speed;
 
             Object.assign(btn.style, {
                 padding: '5px 12px',
@@ -157,13 +158,13 @@
                 borderWidth: '1px'
             });
 
-            // Hover effects (only apply if it's not the currently active button)
+            // Hover configurations
             btn.onmouseover = () => {
                 if (parseFloat(btn.dataset.speed) !== targetSpeed) {
                     btn.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
                 }
             };
-            btn.onmouseout = () => updateButtonColors(); // Reset to standard/active state
+            btn.onmouseout = () => updateButtonColors();
 
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -193,25 +194,26 @@
 
         wrapper.appendChild(credit);
         container.appendChild(wrapper);
-        
-        // Initialize the correct button colors and set the initial fade timer
+
         updateButtonColors();
         wakeUpUI();
     }
 
-    // Master Enforcement Loop
+    // Master Enforcement Loop for both platforms
     setInterval(() => {
         const videos = document.querySelectorAll('video');
         const activeContainer = document.fullscreenElement || document.body;
-        const uiExists = document.getElementById('pv-speed-controller');
+        const uiExists = document.getElementById('stream-speed-controller');
 
         if (videos.length > 0) {
+            // Apply the speed configuration universally to any detected video players
             videos.forEach(v => {
                 if (v.playbackRate !== targetSpeed) {
                     v.playbackRate = targetSpeed;
                 }
             });
 
+            // Maintain layout layers if full-screen environment updates
             if (!uiExists || uiExists.parentElement !== activeContainer) {
                 injectUI(activeContainer);
             }
